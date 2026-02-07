@@ -1,0 +1,5 @@
+(executable
+ (name app)
+ (libraries shared js_of_ocaml js_of_ocaml-lwt)
+ (preprocess (pps js_of_ocaml-ppx))
+ (modes js))

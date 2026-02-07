@@ -1,0 +1,31 @@
+# Normalise line endings
+* text=auto
+
+# C source
+*.c text eol=lf
+*.h text eol=lf
+
+# OCaml source
+*.ml text eol=lf
+*.mli text eol=lf
+
+# Build config
+Makefile text eol=lf
+dune text eol=lf
+dune-project text eol=lf
+*.opam text eol=lf
+
+# Shell scripts
+*.sh text eol=lf
+
+# Web
+*.html text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+
+# Vendored SQLite is large but text
+vendor/sqlite3.c text eol=lf linguist-vendored
+vendor/sqlite3.h text eol=lf linguist-vendored
+vendor/mongoose.c text eol=lf linguist-vendored
+vendor/mongoose.h text eol=lf linguist-vendored
+static/leaflet/* linguist-vendored

@@ -1,0 +1,5 @@
+(library
+ (name core)
+ (public_name callout-core)
+ (libraries shared)
+ (modules incident dispatch unit event geo auth sync))
