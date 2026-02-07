@@ -30,6 +30,17 @@ The guiding principle: the software that tells fire engines where to go probably
 - **Offline-first.** The client works without a network connection and syncs when it gets one back. Because radio dead spots are a real thing.
 - **Deterministic engine.** The core dispatch engine is a pure function: state + command = state + events. No I/O, no randomness. Given the same inputs it will produce the same outputs every single time. We've tested this up to 37 million commands.
 
+## Constraints
+
+Rules the codebase holds itself to, because dispatch software that misbehaves is not the fun kind of exciting.
+
+- No dynamic memory allocation in C hot paths after initialisation
+- All OCaml types are exhaustively matched. No wildcards on critical paths. If you add a state, the compiler makes you handle it everywhere.
+- Every state transition is explicit in the type system
+- SQLite in WAL mode for concurrent read/write safety
+- All network input validated at the C boundary before it reaches OCaml
+- Event log is append-only. Nothing is ever deleted, only superseded.
+
 ## Project Structure
 
 ```
@@ -118,17 +129,6 @@ This follows ICS (Incident Command System). Higher authority overrides lower. A 
 5. Clients apply and mark as synced
 
 If two events conflict, authority wins. If authority is equal, the later timestamp wins. Same rules you'd use on the fireground.
-
-## Constraints
-
-Rules the codebase holds itself to, because dispatch software that misbehaves is not the fun kind of exciting.
-
-- No dynamic memory allocation in C hot paths after initialisation
-- All OCaml types are exhaustively matched. No wildcards on critical paths. If you add a state, the compiler makes you handle it everywhere.
-- Every state transition is explicit in the type system
-- SQLite in WAL mode for concurrent read/write safety
-- All network input validated at the C boundary before it reaches OCaml
-- Event log is append-only. Nothing is ever deleted, only superseded.
 
 ## Scope
 
