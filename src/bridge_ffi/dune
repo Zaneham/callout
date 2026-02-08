@@ -1,0 +1,4 @@
+(library
+ (name bridge_ffi)
+ (public_name callout-bridge)
+ (libraries engine codec unix))

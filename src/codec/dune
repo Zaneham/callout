@@ -1,0 +1,4 @@
+(library
+ (name codec)
+ (public_name callout-codec)
+ (libraries shared engine yojson unix))

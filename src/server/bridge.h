@@ -5,10 +5,9 @@
  * The border crossing between C and OCaml.
  *
  * Everything from the network gets checked here before it's
- * allowed anywhere near the domain logic. Think of it as the
- * bouncer. Currently running in stub mode while the FFI
- * integration is built out, so the bouncer is just waving
- * everyone through to the database directly.
+ * allowed anywhere near the domain logic. The OCaml runtime
+ * is started on bridge_init(), and all dispatch logic runs
+ * through caml_callback into the engine.
  */
 
 #include <stddef.h>

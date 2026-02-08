@@ -104,5 +104,8 @@ val unit_status_to_string : unit_status -> string
 val authority_to_int : authority -> int
 val int_to_authority : int -> authority option
 val authority_to_string : authority -> string
+val string_to_authority : string -> authority option
+
+val string_to_severity : string -> severity option
 
 val authority_outranks : authority -> authority -> bool

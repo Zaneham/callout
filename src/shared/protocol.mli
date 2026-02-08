@@ -15,7 +15,13 @@ type server_msg =
   | Pong
 
 val encode_event : Types.event -> string
+val encode_events : Types.event list -> string
 val decode_event : string -> Types.event option
+
+val encode_incident : Types.incident -> string
+val encode_incidents : Types.incident list -> string
+val encode_unit_ : Types.unit_ -> string
+val encode_units : Types.unit_ list -> string
 
 val encode_client_msg : client_msg -> string
 val decode_client_msg : string -> client_msg option

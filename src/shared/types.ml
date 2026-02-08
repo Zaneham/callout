@@ -155,5 +155,20 @@ let authority_to_string = function
   | Crew_leader -> "crew_leader"
   | Field_unit -> "field_unit"
 
+let string_to_authority = function
+  | "dispatcher" -> Some Dispatcher
+  | "incident_commander" -> Some Incident_commander
+  | "crew_leader" -> Some Crew_leader
+  | "field_unit" -> Some Field_unit
+  | _ -> None
+
+let string_to_severity = function
+  | "P1" -> Some P1
+  | "P2" -> Some P2
+  | "P3" -> Some P3
+  | "P4" -> Some P4
+  | "P5" -> Some P5
+  | _ -> None
+
 let authority_outranks a b =
   authority_to_int a < authority_to_int b

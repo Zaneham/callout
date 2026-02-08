@@ -15,6 +15,11 @@
 CC        = gcc
 CFLAGS    = -Wall -Werror -Wextra -pedantic -std=c11 -O2
 CFLAGS   += -I src/server -I vendor
+
+# OCaml stdlib location for caml/ headers and libasmrun
+OCAML_STDLIB := $(shell ocamlfind printconf stdlib)
+CFLAGS   += -I $(OCAML_STDLIB)
+
 LDFLAGS   = -lpthread -lws2_32
 
 # Our source files (compiled with strict warnings)
@@ -28,24 +33,37 @@ SERVER_OBJ = build/main.o \
 VENDOR_OBJ = build/mongoose.o \
              build/sqlite3.o
 
+# OCaml bridge object (produced by ocamlopt -output-obj)
+BRIDGE_FFI_OBJ = build/bridge_ffi.o
+
 SERVER_BIN = build/callout-server
 
 # -------------------------------------------------------------------
 # Top-level targets
 # -------------------------------------------------------------------
 
-.PHONY: all server ocaml client test clean run setup harness bench stress
+.PHONY: all server ocaml client test clean run setup harness bench stress bridge-ffi
 
 all: server ocaml client
+
+# -------------------------------------------------------------------
+# OCaml bridge FFI object
+# -------------------------------------------------------------------
+
+bridge-ffi: ocaml
+	@mkdir -p build
+	ocamlfind ocamlopt -package callout-bridge -linkpkg -output-obj \
+		-o $(BRIDGE_FFI_OBJ)
+	@echo "==> Built OCaml bridge FFI object: $(BRIDGE_FFI_OBJ)"
 
 # -------------------------------------------------------------------
 # C Server
 # -------------------------------------------------------------------
 
-server: $(SERVER_BIN)
-
-$(SERVER_BIN): $(SERVER_OBJ) $(VENDOR_OBJ)
-	$(CC) -o $@ $^ $(LDFLAGS)
+server: bridge-ffi $(SERVER_OBJ) $(VENDOR_OBJ)
+	$(CC) -o $(SERVER_BIN) $(SERVER_OBJ) $(VENDOR_OBJ) $(BRIDGE_FFI_OBJ) \
+		-L$(OCAML_STDLIB) -lasmrun -lunix \
+		$(LDFLAGS)
 	@echo "==> Built C server: $(SERVER_BIN)"
 
 # Our code: strict warnings
@@ -114,7 +132,7 @@ run: all
 
 setup:
 	@echo "Installing OCaml dependencies..."
-	opam install dune js_of_ocaml js_of_ocaml-ppx js_of_ocaml-lwt alcotest --yes
+	opam install dune js_of_ocaml js_of_ocaml-ppx js_of_ocaml-lwt alcotest yojson --yes
 	@echo ""
 	@echo "Downloading Mongoose..."
 	@mkdir -p vendor

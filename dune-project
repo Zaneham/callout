@@ -27,6 +27,16 @@
  (depends callout-core))
 
 (package
+ (name callout-codec)
+ (synopsis "Callout CAD server-side JSON codec")
+ (depends callout-engine yojson))
+
+(package
+ (name callout-bridge)
+ (synopsis "Callout CAD OCaml FFI bridge")
+ (depends callout-engine callout-codec))
+
+(package
  (name callout-harness)
  (synopsis "Callout CAD headless test harness")
  (depends callout-engine))

@@ -74,6 +74,38 @@ let encode_events events =
   let encoded = List.map encode_event events in
   "[" ^ String.concat "," encoded ^ "]"
 
+let encode_incident (inc : Types.incident) =
+  Printf.sprintf
+    "{\"id\":\"%s\",\"status\":%s,\"severity\":%s,\"position\":%s,\"description\":\"%s\",\"created_at\":%f,\"updated_at\":%f}"
+    inc.id
+    (encode_incident_status inc.status)
+    (encode_severity inc.severity)
+    (encode_position inc.position)
+    inc.description
+    inc.created_at
+    inc.updated_at
+
+let encode_incidents incidents =
+  let encoded = List.map encode_incident incidents in
+  "[" ^ String.concat "," encoded ^ "]"
+
+let encode_unit_ (u : Types.unit_) =
+  let pos_str = match u.position with
+    | Some p -> encode_position p
+    | None -> "null"
+  in
+  Printf.sprintf
+    "{\"id\":\"%s\",\"name\":\"%s\",\"status\":%s,\"position\":%s,\"updated_at\":%f}"
+    u.id
+    u.name
+    (encode_unit_status u.status)
+    pos_str
+    u.updated_at
+
+let encode_units units =
+  let encoded = List.map encode_unit_ units in
+  "[" ^ String.concat "," encoded ^ "]"
+
 let encode_client_msg = function
   | Push_events events ->
     Printf.sprintf "{\"type\":\"push_events\",\"events\":%s}"

@@ -16,6 +16,80 @@ let send_message msg =
     ws##send (Js.string msg)
   | _ -> ()
 
+(* --- JSON helpers using browser-native JSON.parse --- *)
+
+let json_parse (s : string) : 'a Js.t =
+  Js.Unsafe.fun_call
+    (Js.Unsafe.js_expr "JSON.parse")
+    [| Js.Unsafe.inject (Js.string s) |]
+
+let get_field obj field =
+  Js.Unsafe.get obj (Js.string field)
+
+let get_string obj field =
+  Js.to_string (get_field obj field)
+
+let get_opt_string obj field =
+  let v = get_field obj field in
+  if Js.Optdef.test (Js.Optdef.return v) &&
+     Js.to_string (Js.typeof v) = "string" then
+    Some (Js.to_string v)
+  else
+    None
+
+(* --- DOM update helpers --- *)
+
+let render_incident_item doc container obj =
+  let id = get_string obj "id" in
+  let status = get_string obj "status" in
+  let severity = get_string obj "severity" in
+  let desc = match get_opt_string obj "description" with
+    | Some d -> d | None -> ""
+  in
+  let item = Dom_html.createDiv doc in
+  item##.className := Js.string "incident-item";
+  item##.innerHTML := Js.string (Printf.sprintf
+    {|<span class="severity %s">%s</span>
+      <span class="incident-id">%s</span>
+      <span class="incident-status">%s</span>
+      <div class="incident-desc">%s</div>|}
+    severity severity (String.sub id 0 (min 8 (String.length id))) status desc);
+  Dom.appendChild container item
+
+let render_unit_item doc container obj =
+  let id = get_string obj "id" in
+  let name = get_string obj "name" in
+  let status_v = get_field obj "status" in
+  let status_str =
+    if Js.to_string (Js.typeof status_v) = "string" then
+      Js.to_string status_v
+    else
+      match get_opt_string status_v "status" with
+      | Some s -> s | None -> "unknown"
+  in
+  let item = Dom_html.createDiv doc in
+  item##.className := Js.string "unit-item";
+  item##.innerHTML := Js.string (Printf.sprintf
+    {|<span class="unit-name">%s</span>
+      <span class="unit-id">%s</span>
+      <span class="unit-status %s">%s</span>|}
+    name (String.sub id 0 (min 8 (String.length id))) status_str status_str);
+  Dom.appendChild container item
+
+let populate_list element_id json_str render_fn =
+  let doc = Dom_html.document in
+  let container = doc##getElementById (Js.string element_id) in
+  Js.Opt.iter container (fun el ->
+    el##.innerHTML := Js.string "";
+    try
+      let arr = json_parse json_str in
+      let len : int = Js.Unsafe.get arr (Js.string "length") in
+      for i = 0 to len - 1 do
+        let obj = Js.Unsafe.get arr i in
+        render_fn doc el obj
+      done
+    with _ -> ())
+
 let init () =
   (* Fetch initial incident list *)
   let open XmlHttpRequest in
@@ -23,9 +97,8 @@ let init () =
   req##_open (Js.string "GET") (Js.string "/api/incidents") Js._true;
   req##.onreadystatechange := Js.wrap_callback (fun () ->
     if req##.readyState = XmlHttpRequest.DONE && req##.status = 200 then begin
-      let _data = Js.Opt.case req##.responseText (fun () -> "") Js.to_string in
-      (* TODO: Parse JSON and populate incident list *)
-      ()
+      let data = Js.Opt.case req##.responseText (fun () -> "") Js.to_string in
+      populate_list "incident-list" data render_incident_item
     end);
   req##send Js.null;
 
@@ -34,17 +107,44 @@ let init () =
   req2##_open (Js.string "GET") (Js.string "/api/units") Js._true;
   req2##.onreadystatechange := Js.wrap_callback (fun () ->
     if req2##.readyState = XmlHttpRequest.DONE && req2##.status = 200 then begin
-      let _data = Js.Opt.case req2##.responseText (fun () -> "") Js.to_string in
-      (* TODO: Parse JSON and populate unit list *)
-      ()
+      let data = Js.Opt.case req2##.responseText (fun () -> "") Js.to_string in
+      populate_list "unit-list" data render_unit_item
     end);
   req2##send Js.null
 
 let handle_message data =
-  (* TODO: Parse event JSON using Protocol.decode_server_msg,
-     update local state, refresh UI *)
-  let _ = data in
-  ()
+  try
+    let j = json_parse data in
+    let msg_type = get_string j "type" in
+    match msg_type with
+    | "events" ->
+      (* Re-fetch lists to reflect new state *)
+      let open XmlHttpRequest in
+      let req = create () in
+      req##_open (Js.string "GET") (Js.string "/api/incidents") Js._true;
+      req##.onreadystatechange := Js.wrap_callback (fun () ->
+        if req##.readyState = XmlHttpRequest.DONE && req##.status = 200 then begin
+          let d = Js.Opt.case req##.responseText (fun () -> "") Js.to_string in
+          populate_list "incident-list" d render_incident_item
+        end);
+      req##send Js.null;
+      let req2 = create () in
+      req2##_open (Js.string "GET") (Js.string "/api/units") Js._true;
+      req2##.onreadystatechange := Js.wrap_callback (fun () ->
+        if req2##.readyState = XmlHttpRequest.DONE && req2##.status = 200 then begin
+          let d = Js.Opt.case req2##.responseText (fun () -> "") Js.to_string in
+          populate_list "unit-list" d render_unit_item
+        end);
+      req2##send Js.null
+    | "pong" -> ()
+    | "error" ->
+      let msg = match get_opt_string j "message" with
+        | Some m -> m | None -> "unknown error"
+      in
+      Console.console##warn (Js.string (Printf.sprintf "server error: %s" msg))
+    | "sync_complete" -> ()
+    | _ -> ()
+  with _ -> ()
 
 let on_map_click lat lng =
   let doc = Dom_html.document in
