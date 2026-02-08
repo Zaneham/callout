@@ -108,18 +108,49 @@ int db_insert_event(const char *id, double timestamp, const char *author,
 }
 
 /*
- * Helper: execute a query and return results as a JSON array string.
- * The callback builds the JSON incrementally.
- * Caller must free the returned string.
+ * Append a JSON-escaped string (with surrounding quotes) to a growing buffer.
+ * Handles ", \, and control characters. Returns 0 on success, -1 on alloc failure.
  */
-static char *query_to_json_array(const char *sql) {
-    sqlite3_stmt *stmt = NULL;
-    int rc = sqlite3_prepare_v2(s_db, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        return NULL;
+static int json_escape_append(char **buf, size_t *size, size_t *used,
+                               const char *s, size_t slen) {
+    /* Worst case: every char becomes \uXXXX (6 chars) + 2 quotes */
+    size_t needed = *used + slen * 6 + 4;
+    if (needed >= *size) {
+        size_t new_size = needed + 4096;
+        char *new_buf = realloc(*buf, new_size);
+        if (new_buf == NULL) return -1;
+        *buf = new_buf;
+        *size = new_size;
     }
+    char *p = *buf + *used;
+    *p++ = '"';
+    for (size_t i = 0; i < slen; i++) {
+        unsigned char c = (unsigned char)s[i];
+        switch (c) {
+            case '"':  *p++ = '\\'; *p++ = '"';  break;
+            case '\\': *p++ = '\\'; *p++ = '\\'; break;
+            case '\n': *p++ = '\\'; *p++ = 'n';  break;
+            case '\r': *p++ = '\\'; *p++ = 'r';  break;
+            case '\t': *p++ = '\\'; *p++ = 't';  break;
+            default:
+                if (c < 0x20) {
+                    p += sprintf(p, "\\u%04x", c);
+                } else {
+                    *p++ = (char)c;
+                }
+                break;
+        }
+    }
+    *p++ = '"';
+    *used = (size_t)(p - *buf);
+    return 0;
+}
 
-    /* Pre-allocate a reasonable buffer */
+/*
+ * Helper: step through a prepared statement and return results as a JSON array.
+ * Finalizes the statement. Caller must free the returned string.
+ */
+static char *stmt_to_json_array(sqlite3_stmt *stmt) {
     size_t buf_size = 4096;
     size_t buf_used = 0;
     char *buf = malloc(buf_size);
@@ -131,24 +162,35 @@ static char *query_to_json_array(const char *sql) {
     buf[buf_used++] = '[';
     int first = 1;
     int col_count = sqlite3_column_count(stmt);
+    int rc;
 
     while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
-        if (!first) {
-            buf[buf_used++] = ',';
+        /* Ensure room for row overhead: comma + braces */
+        if (buf_used + 4 >= buf_size) {
+            buf_size *= 2;
+            char *new_buf = realloc(buf, buf_size);
+            if (new_buf == NULL) {
+                free(buf);
+                sqlite3_finalize(stmt);
+                return NULL;
+            }
+            buf = new_buf;
         }
-        first = 0;
 
+        if (!first) buf[buf_used++] = ',';
+        first = 0;
         buf[buf_used++] = '{';
+
         for (int i = 0; i < col_count; i++) {
             if (i > 0) buf[buf_used++] = ',';
 
             const char *name = sqlite3_column_name(stmt, i);
             int type = sqlite3_column_type(stmt, i);
 
-            /* Ensure buffer has room (conservative estimate) */
+            /* Ensure buffer has room for column name + value overhead */
             size_t needed = strlen(name) + 256;
             if (buf_used + needed >= buf_size) {
-                buf_size *= 2;
+                buf_size = buf_used + needed + 4096;
                 char *new_buf = realloc(buf, buf_size);
                 if (new_buf == NULL) {
                     free(buf);
@@ -173,18 +215,12 @@ static char *query_to_json_array(const char *sql) {
                 case SQLITE_TEXT: {
                     const char *text = (const char *)sqlite3_column_text(stmt, i);
                     size_t text_len = text ? strlen(text) : 0;
-                    if (buf_used + text_len + 4 >= buf_size) {
-                        buf_size = buf_used + text_len + 4096;
-                        char *new_buf = realloc(buf, buf_size);
-                        if (new_buf == NULL) {
-                            free(buf);
-                            sqlite3_finalize(stmt);
-                            return NULL;
-                        }
-                        buf = new_buf;
+                    if (json_escape_append(&buf, &buf_size, &buf_used,
+                                            text ? text : "", text_len) != 0) {
+                        free(buf);
+                        sqlite3_finalize(stmt);
+                        return NULL;
                     }
-                    buf_used += (size_t)snprintf(buf + buf_used, buf_size - buf_used,
-                                                 "\"%s\"", text ? text : "");
                     break;
                 }
                 case SQLITE_NULL:
@@ -197,9 +233,29 @@ static char *query_to_json_array(const char *sql) {
                     break;
             }
         }
+
+        if (buf_used + 2 >= buf_size) {
+            buf_size = buf_used + 256;
+            char *new_buf = realloc(buf, buf_size);
+            if (new_buf == NULL) {
+                free(buf);
+                sqlite3_finalize(stmt);
+                return NULL;
+            }
+            buf = new_buf;
+        }
         buf[buf_used++] = '}';
     }
 
+    if (buf_used + 2 >= buf_size) {
+        char *new_buf = realloc(buf, buf_used + 2);
+        if (new_buf == NULL) {
+            free(buf);
+            sqlite3_finalize(stmt);
+            return NULL;
+        }
+        buf = new_buf;
+    }
     buf[buf_used++] = ']';
     buf[buf_used] = '\0';
 
@@ -207,12 +263,20 @@ static char *query_to_json_array(const char *sql) {
     return buf;
 }
 
+static char *query_to_json_array(const char *sql) {
+    sqlite3_stmt *stmt = NULL;
+    int rc = sqlite3_prepare_v2(s_db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) return NULL;
+    return stmt_to_json_array(stmt);
+}
+
 char *db_query_events_since(double since) {
-    char sql[256];
-    snprintf(sql, sizeof(sql),
-             "SELECT * FROM events WHERE timestamp > %f ORDER BY timestamp ASC",
-             since);
-    return query_to_json_array(sql);
+    const char *sql = "SELECT * FROM events WHERE timestamp > ? ORDER BY timestamp ASC";
+    sqlite3_stmt *stmt = NULL;
+    int rc = sqlite3_prepare_v2(s_db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) return NULL;
+    sqlite3_bind_double(stmt, 1, since);
+    return stmt_to_json_array(stmt);
 }
 
 char *db_query_incidents(void) {

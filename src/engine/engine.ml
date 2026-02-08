@@ -335,5 +335,5 @@ let get_incident state id = IdMap.find_opt id state.incidents
 let get_unit state id = IdMap.find_opt id state.units
 let get_all_incidents state = IdMap.fold (fun _ v acc -> v :: acc) state.incidents []
 let get_all_units state = IdMap.fold (fun _ v acc -> v :: acc) state.units []
-let get_events state = state.events
+let get_events state = List.rev state.events
 let get_stats state = state.stats

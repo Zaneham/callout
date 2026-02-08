@@ -15,6 +15,11 @@ let member_float j key =
   | `Int i -> Some (Float.of_int i)
   | _ -> None
 
+let member_int j key =
+  match Yojson.Basic.Util.member key j with
+  | `Int i -> Some i
+  | _ -> None
+
 let decode_position j =
   match member_float j "lat", member_float j "lng" with
   | Some lat, Some lng ->
@@ -177,6 +182,33 @@ let decode_event j =
      | None -> None)
   | _ -> None
 
+let decode_db_event j =
+  match member_string j "id",
+        member_float j "timestamp",
+        member_string j "author",
+        Option.bind (member_int j "authority") Shared.Types.int_to_authority with
+  | Some id, Some timestamp, Some author, Some authority ->
+    let payload_opt =
+      match member_string j "payload" with
+      | Some s ->
+        (match json_of_string s with
+         | Some pj -> decode_event_payload pj
+         | None -> None)
+      | None -> None
+    in
+    (match payload_opt with
+     | Some payload -> Some { Shared.Types.id; timestamp; author; authority; payload }
+     | None -> None)
+  | _ -> None
+
+let decode_db_events json_str =
+  match json_of_string json_str with
+  | None -> []
+  | Some j ->
+    (match j with
+     | `List items -> List.filter_map decode_db_event items
+     | _ -> [])
+
 let decode_client_msg json_str =
   match json_of_string json_str with
   | None -> None
@@ -199,10 +231,10 @@ let decode_client_msg json_str =
 let encode_apply_result (r : Engine.apply_result) =
   match r.error with
   | Some msg ->
-    Printf.sprintf "{\"ok\":false,\"error\":\"%s\"}" msg
+    Printf.sprintf "{\"ok\":false,\"error\":\"%s\"}" (Shared.Protocol.json_escape msg)
   | None ->
     let events_json = Shared.Protocol.encode_events r.new_events in
     Printf.sprintf "{\"ok\":true,\"events\":%s}" events_json
 
 let encode_error msg =
-  Printf.sprintf "{\"ok\":false,\"error\":\"%s\"}" msg
+  Printf.sprintf "{\"ok\":false,\"error\":\"%s\"}" (Shared.Protocol.json_escape msg)

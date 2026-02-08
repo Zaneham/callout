@@ -5,12 +5,15 @@
  * registers callbacks that the C server invokes via caml_callback.
  *)
 
+let make_seed () =
+  Int64.of_float (Unix.gettimeofday () *. 1000000.0)
+
 let engine_state : Engine.state ref =
-  ref (Engine.init ~seed:42L)
+  ref (Engine.init ~seed:(make_seed ()))
 
 let () =
   Callback.register "bridge_init" (fun () ->
-    engine_state := Engine.init ~seed:42L;
+    engine_state := Engine.init ~seed:(make_seed ());
     "ok"
   )
 
@@ -63,4 +66,12 @@ let () =
   Callback.register "bridge_get_events" (fun () ->
     let events = Engine.get_events !engine_state in
     Shared.Protocol.encode_events events
+  )
+
+let () =
+  Callback.register "bridge_load_events" (fun json_str ->
+    let events = Codec.decode_db_events json_str in
+    let state = List.fold_left Engine.apply_event !engine_state events in
+    engine_state := state;
+    List.length events
   )

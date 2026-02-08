@@ -30,7 +30,7 @@ static void remove_connection(struct mg_connection *c) {
     for (int i = 0; i < WS_MAX_CONNECTIONS; i++) {
         if (s_connections[i] == c) {
             s_connections[i] = NULL;
-            s_conn_count--;
+            if (s_conn_count > 0) s_conn_count--;
             return;
         }
     }

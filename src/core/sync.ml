@@ -1,5 +1,7 @@
 open Shared.Types
 
+module StringSet = Set.Make(String)
+
 type sync_result = {
   accepted : event list;
   rejected : (event * string) list;
@@ -11,11 +13,11 @@ type sync_result = {
 let merge_events ~local ~remote =
   let local_ids =
     List.fold_left
-      (fun acc (e : event) -> List.cons e.id acc)
-      [] local
+      (fun acc (e : event) -> StringSet.add e.id acc)
+      StringSet.empty local
   in
   let new_events =
-    List.filter (fun (e : event) -> not (List.mem e.id local_ids)) remote
+    List.filter (fun (e : event) -> not (StringSet.mem e.id local_ids)) remote
   in
   (* All genuinely new events are accepted.
      Conflict resolution happens at the application layer

@@ -126,6 +126,20 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    /* Replay persisted events into the engine */
+    {
+        char *events_json = db_query_events_since(0.0);
+        if (events_json != NULL) {
+            int count = bridge_load_events(events_json, strlen(events_json));
+            if (count >= 0) {
+                fprintf(stdout, "callout: replayed %d events from database\n", count);
+            } else {
+                fprintf(stderr, "callout: warning: failed to replay events\n");
+            }
+            free(events_json);
+        }
+    }
+
     http_init(s_doc_root);
     ws_init();
 

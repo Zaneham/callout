@@ -14,8 +14,10 @@
  *
  * Initialises the OCaml runtime, looks up the callbacks registered
  * by bridge_ffi.ml, and forwards every call across the border.
- * String results are copied into a static buffer because the OCaml
- * GC can relocate heap objects between calls.
+ *
+ * String results are copied into a dynamic buffer because the OCaml
+ * GC can relocate heap objects between calls. All functions that
+ * cross the FFI boundary use CAMLparam/CAMLlocal to register GC roots.
  */
 
 static int s_initialized = 0;
@@ -26,14 +28,24 @@ static const value *cb_create_incident = NULL;
 static const value *cb_get_incidents   = NULL;
 static const value *cb_get_units       = NULL;
 static const value *cb_get_events      = NULL;
+static const value *cb_load_events     = NULL;
 
-/* Static buffer for string results — OCaml GC can move strings. */
-static char s_result_buf[65536];
+/* Dynamic result buffer — grows as needed, never shrinks.
+ * Safe because Mongoose is single-threaded. */
+static char *s_result_buf = NULL;
+static size_t s_result_buf_size = 0;
 
 static const char *copy_ocaml_string(value v) {
     const char *s = String_val(v);
     size_t len = caml_string_length(v);
-    if (len >= sizeof(s_result_buf)) len = sizeof(s_result_buf) - 1;
+    if (len + 1 > s_result_buf_size) {
+        size_t new_size = len + 1;
+        if (new_size < 65536) new_size = 65536;
+        char *new_buf = realloc(s_result_buf, new_size);
+        if (new_buf == NULL) return NULL;
+        s_result_buf = new_buf;
+        s_result_buf_size = new_size;
+    }
     memcpy(s_result_buf, s, len);
     s_result_buf[len] = '\0';
     return s_result_buf;
@@ -53,6 +65,7 @@ int bridge_init(void) {
     cb_get_incidents   = caml_named_value("bridge_get_incidents");
     cb_get_units       = caml_named_value("bridge_get_units");
     cb_get_events      = caml_named_value("bridge_get_events");
+    cb_load_events     = caml_named_value("bridge_load_events");
 
     if (!cb_init || !cb_handle_ws_msg || !cb_create_incident ||
         !cb_get_incidents || !cb_get_units || !cb_get_events) {
@@ -70,43 +83,70 @@ int bridge_init(void) {
 
 void bridge_shutdown(void) {
     s_initialized = 0;
+    free(s_result_buf);
+    s_result_buf = NULL;
+    s_result_buf_size = 0;
 }
 
 const char *bridge_handle_ws_message(const char *json, size_t len) {
-    (void)len;
-    if (!cb_handle_ws_msg) return NULL;
+    CAMLparam0();
+    CAMLlocal2(v_json, result);
+    if (!cb_handle_ws_msg) CAMLreturnT(const char *, NULL);
 
-    value v_json = caml_copy_string(json);
-    value result = caml_callback(*cb_handle_ws_msg, v_json);
-    return copy_ocaml_string(result);
+    v_json = caml_alloc_initialized_string(len, json);
+    result = caml_callback(*cb_handle_ws_msg, v_json);
+    const char *ret = copy_ocaml_string(result);
+    CAMLreturnT(const char *, ret);
 }
 
 const char *bridge_create_incident(const char *json, size_t len) {
-    (void)len;
-    if (!cb_create_incident) return NULL;
+    CAMLparam0();
+    CAMLlocal2(v_json, result);
+    if (!cb_create_incident) CAMLreturnT(const char *, NULL);
 
-    value v_json = caml_copy_string(json);
-    value result = caml_callback(*cb_create_incident, v_json);
-    return copy_ocaml_string(result);
+    v_json = caml_alloc_initialized_string(len, json);
+    result = caml_callback(*cb_create_incident, v_json);
+    const char *ret = copy_ocaml_string(result);
+    CAMLreturnT(const char *, ret);
 }
 
 const char *bridge_get_incidents(void) {
-    if (!cb_get_incidents) return NULL;
+    CAMLparam0();
+    CAMLlocal1(result);
+    if (!cb_get_incidents) CAMLreturnT(const char *, NULL);
 
-    value result = caml_callback(*cb_get_incidents, Val_unit);
-    return copy_ocaml_string(result);
+    result = caml_callback(*cb_get_incidents, Val_unit);
+    const char *ret = copy_ocaml_string(result);
+    CAMLreturnT(const char *, ret);
 }
 
 const char *bridge_get_units(void) {
-    if (!cb_get_units) return NULL;
+    CAMLparam0();
+    CAMLlocal1(result);
+    if (!cb_get_units) CAMLreturnT(const char *, NULL);
 
-    value result = caml_callback(*cb_get_units, Val_unit);
-    return copy_ocaml_string(result);
+    result = caml_callback(*cb_get_units, Val_unit);
+    const char *ret = copy_ocaml_string(result);
+    CAMLreturnT(const char *, ret);
 }
 
 const char *bridge_get_events(void) {
-    if (!cb_get_events) return NULL;
+    CAMLparam0();
+    CAMLlocal1(result);
+    if (!cb_get_events) CAMLreturnT(const char *, NULL);
 
-    value result = caml_callback(*cb_get_events, Val_unit);
-    return copy_ocaml_string(result);
+    result = caml_callback(*cb_get_events, Val_unit);
+    const char *ret = copy_ocaml_string(result);
+    CAMLreturnT(const char *, ret);
+}
+
+int bridge_load_events(const char *json, size_t len) {
+    CAMLparam0();
+    CAMLlocal2(v_json, result);
+    if (!cb_load_events) CAMLreturnT(int, -1);
+
+    v_json = caml_alloc_initialized_string(len, json);
+    result = caml_callback(*cb_load_events, v_json);
+    int count = Int_val(result);
+    CAMLreturnT(int, count);
 }

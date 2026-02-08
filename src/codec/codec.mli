@@ -6,3 +6,4 @@ val decode_command_envelope : string -> Engine.command_envelope option
 val decode_client_msg : string -> Shared.Protocol.client_msg option
 val encode_apply_result : Engine.apply_result -> string
 val encode_error : string -> string
+val decode_db_events : string -> Shared.Types.event list

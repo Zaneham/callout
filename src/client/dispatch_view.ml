@@ -37,6 +37,36 @@ let get_opt_string obj field =
   else
     None
 
+(* --- String escaping --- *)
+
+let html_escape s =
+  let buf = Buffer.create (String.length s + 16) in
+  String.iter (fun c ->
+    match c with
+    | '&' -> Buffer.add_string buf "&amp;"
+    | '<' -> Buffer.add_string buf "&lt;"
+    | '>' -> Buffer.add_string buf "&gt;"
+    | '"' -> Buffer.add_string buf "&quot;"
+    | '\'' -> Buffer.add_string buf "&#x27;"
+    | c -> Buffer.add_char buf c
+  ) s;
+  Buffer.contents buf
+
+let json_escape s =
+  let buf = Buffer.create (String.length s + 16) in
+  String.iter (fun c ->
+    match c with
+    | '"' -> Buffer.add_string buf "\\\""
+    | '\\' -> Buffer.add_string buf "\\\\"
+    | '\n' -> Buffer.add_string buf "\\n"
+    | '\r' -> Buffer.add_string buf "\\r"
+    | '\t' -> Buffer.add_string buf "\\t"
+    | c when Char.code c < 0x20 ->
+      Buffer.add_string buf (Printf.sprintf "\\u%04x" (Char.code c))
+    | c -> Buffer.add_char buf c
+  ) s;
+  Buffer.contents buf
+
 (* --- DOM update helpers --- *)
 
 let render_incident_item doc container obj =
@@ -53,7 +83,9 @@ let render_incident_item doc container obj =
       <span class="incident-id">%s</span>
       <span class="incident-status">%s</span>
       <div class="incident-desc">%s</div>|}
-    severity severity (String.sub id 0 (min 8 (String.length id))) status desc);
+    (html_escape severity) (html_escape severity)
+    (html_escape (String.sub id 0 (min 8 (String.length id))))
+    (html_escape status) (html_escape desc));
   Dom.appendChild container item
 
 let render_unit_item doc container obj =
@@ -73,7 +105,9 @@ let render_unit_item doc container obj =
     {|<span class="unit-name">%s</span>
       <span class="unit-id">%s</span>
       <span class="unit-status %s">%s</span>|}
-    name (String.sub id 0 (min 8 (String.length id))) status_str status_str);
+    (html_escape name)
+    (html_escape (String.sub id 0 (min 8 (String.length id))))
+    (html_escape status_str) (html_escape status_str));
   Dom.appendChild container item
 
 let populate_list element_id json_str render_fn =
@@ -201,13 +235,13 @@ let on_map_click lat lng =
       let msg = Printf.sprintf
         {|{"type":"push_events","events":[{"type":"incident_created","position":{"lat":%f,"lng":%f,"timestamp":%f},"severity":"P%s","description":"%s"}]}|}
         lat lng (Js.to_float (new%js Js.date_now)##getTime /. 1000.0)
-        severity description
+        severity (json_escape description)
       in
       send_message msg;
 
       (* Add marker to map *)
       Map_view.add_incident_marker ~lat ~lng
-        ~popup_text:(Printf.sprintf "P%s: %s" severity description);
+        ~popup_text:(Printf.sprintf "P%s: %s" (html_escape severity) (html_escape description));
 
       (* Close dialog *)
       Dom.removeChild doc##.body dialog;

@@ -14,9 +14,12 @@ type server_msg =
   | Error of { code : int; message : string }
   | Pong
 
+(** Escape a string for safe inclusion in a JSON string literal.
+    Handles quotes, backslashes, and control characters (U+0000..U+001F). *)
+val json_escape : string -> string
+
 val encode_event : Types.event -> string
 val encode_events : Types.event list -> string
-val decode_event : string -> Types.event option
 
 val encode_incident : Types.incident -> string
 val encode_incidents : Types.incident list -> string
@@ -24,7 +27,4 @@ val encode_unit_ : Types.unit_ -> string
 val encode_units : Types.unit_ list -> string
 
 val encode_client_msg : client_msg -> string
-val decode_client_msg : string -> client_msg option
-
 val encode_server_msg : server_msg -> string
-val decode_server_msg : string -> server_msg option

@@ -27,4 +27,7 @@ void http_send_json(struct mg_connection *c, int status_code, const char *json);
 /* Send an error response */
 void http_send_error(struct mg_connection *c, int status_code, const char *message);
 
+/* Set the CORS origin header (default: "*") */
+void http_set_cors_origin(const char *origin);
+
 #endif /* CALLOUT_HTTP_H */

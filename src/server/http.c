@@ -6,6 +6,7 @@
 #include <stdio.h>
 
 static const char *s_doc_root = "./static";
+static char s_cors_origin[256] = "*";
 
 void http_init(const char *doc_root) {
     if (doc_root != NULL) {
@@ -13,16 +14,34 @@ void http_init(const char *doc_root) {
     }
 }
 
+void http_set_cors_origin(const char *origin) {
+    if (origin != NULL) {
+        snprintf(s_cors_origin, sizeof(s_cors_origin), "%s", origin);
+    }
+}
+
 void http_send_json(struct mg_connection *c, int status_code, const char *json) {
-    mg_http_reply(c, status_code,
-                  "Content-Type: application/json\r\n"
-                  "Access-Control-Allow-Origin: *\r\n",
-                  "%s", json);
+    char headers[512];
+    snprintf(headers, sizeof(headers),
+             "Content-Type: application/json\r\n"
+             "Access-Control-Allow-Origin: %s\r\n",
+             s_cors_origin);
+    mg_http_reply(c, status_code, headers, "%s", json);
 }
 
 void http_send_error(struct mg_connection *c, int status_code, const char *message) {
-    char buf[512];
-    snprintf(buf, sizeof(buf), "{\"error\":\"%s\"}", message);
+    /* Escape " and \ in error message for safe JSON embedding */
+    char escaped[1024];
+    size_t j = 0;
+    for (size_t i = 0; message[i] && j < sizeof(escaped) - 2; i++) {
+        if (message[i] == '"' || message[i] == '\\') {
+            escaped[j++] = '\\';
+        }
+        escaped[j++] = message[i];
+    }
+    escaped[j] = '\0';
+    char buf[1280];
+    snprintf(buf, sizeof(buf), "{\"error\":\"%s\"}", escaped);
     http_send_json(c, status_code, buf);
 }
 

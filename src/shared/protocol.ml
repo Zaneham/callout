@@ -9,9 +9,21 @@ type server_msg =
   | Error of { code : int; message : string }
   | Pong
 
-(* JSON encoding/decoding using a minimal approach.
-   We build JSON strings directly to avoid external dependencies.
-   In production, consider yojson or jsonm. *)
+(* JSON string escaping — handles quotes, backslashes, and control characters. *)
+let json_escape s =
+  let buf = Buffer.create (String.length s + 16) in
+  String.iter (fun c ->
+    match c with
+    | '"' -> Buffer.add_string buf "\\\""
+    | '\\' -> Buffer.add_string buf "\\\\"
+    | '\n' -> Buffer.add_string buf "\\n"
+    | '\r' -> Buffer.add_string buf "\\r"
+    | '\t' -> Buffer.add_string buf "\\t"
+    | c when Char.code c < 0x20 ->
+      Buffer.add_string buf (Printf.sprintf "\\u%04x" (Char.code c))
+    | c -> Buffer.add_char buf c
+  ) s;
+  Buffer.contents buf
 
 let encode_position (p : Types.position) =
   let acc_str = match p.accuracy with
@@ -22,51 +34,52 @@ let encode_position (p : Types.position) =
     p.lat p.lng acc_str p.timestamp
 
 let encode_severity (s : Types.severity) =
-  Printf.sprintf "\"%s\"" (Types.severity_to_string s)
+  Printf.sprintf "\"%s\"" (json_escape (Types.severity_to_string s))
 
 let encode_incident_status (s : Types.incident_status) =
-  Printf.sprintf "\"%s\"" (Types.incident_status_to_string s)
+  Printf.sprintf "\"%s\"" (json_escape (Types.incident_status_to_string s))
 
 let encode_unit_status (s : Types.unit_status) =
   let base = Types.unit_status_to_string s in
   match s with
   | Types.U_dispatched id | Types.U_en_route id | Types.U_on_scene id ->
-    Printf.sprintf "{\"status\":\"%s\",\"incident_id\":\"%s\"}" base id
-  | _ -> Printf.sprintf "\"%s\"" base
+    Printf.sprintf "{\"status\":\"%s\",\"incident_id\":\"%s\"}"
+      (json_escape base) (json_escape id)
+  | _ -> Printf.sprintf "\"%s\"" (json_escape base)
 
 let encode_authority (a : Types.authority) =
-  Printf.sprintf "\"%s\"" (Types.authority_to_string a)
+  Printf.sprintf "\"%s\"" (json_escape (Types.authority_to_string a))
 
 let encode_event_payload = function
   | Types.Incident_created { position; severity; description } ->
     Printf.sprintf
       "{\"type\":\"incident_created\",\"position\":%s,\"severity\":%s,\"description\":\"%s\"}"
-      (encode_position position) (encode_severity severity) description
+      (encode_position position) (encode_severity severity) (json_escape description)
   | Types.Incident_status_changed { incident_id; new_status } ->
     Printf.sprintf
       "{\"type\":\"incident_status_changed\",\"incident_id\":\"%s\",\"new_status\":%s}"
-      incident_id (encode_incident_status new_status)
+      (json_escape incident_id) (encode_incident_status new_status)
   | Types.Unit_dispatched { unit_id; incident_id } ->
     Printf.sprintf
       "{\"type\":\"unit_dispatched\",\"unit_id\":\"%s\",\"incident_id\":\"%s\"}"
-      unit_id incident_id
+      (json_escape unit_id) (json_escape incident_id)
   | Types.Unit_status_changed { unit_id; new_status } ->
     Printf.sprintf
       "{\"type\":\"unit_status_changed\",\"unit_id\":\"%s\",\"new_status\":%s}"
-      unit_id (encode_unit_status new_status)
+      (json_escape unit_id) (encode_unit_status new_status)
   | Types.Unit_position_updated { unit_id; position } ->
     Printf.sprintf
       "{\"type\":\"unit_position_updated\",\"unit_id\":\"%s\",\"position\":%s}"
-      unit_id (encode_position position)
+      (json_escape unit_id) (encode_position position)
   | Types.Note_added { incident_id; text } ->
     Printf.sprintf
       "{\"type\":\"note_added\",\"incident_id\":\"%s\",\"text\":\"%s\"}"
-      incident_id text
+      (json_escape incident_id) (json_escape text)
 
 let encode_event (e : Types.event) =
   Printf.sprintf
     "{\"id\":\"%s\",\"timestamp\":%f,\"author\":\"%s\",\"authority\":%s,\"payload\":%s}"
-    e.id e.timestamp e.author
+    (json_escape e.id) e.timestamp (json_escape e.author)
     (encode_authority e.authority)
     (encode_event_payload e.payload)
 
@@ -77,11 +90,11 @@ let encode_events events =
 let encode_incident (inc : Types.incident) =
   Printf.sprintf
     "{\"id\":\"%s\",\"status\":%s,\"severity\":%s,\"position\":%s,\"description\":\"%s\",\"created_at\":%f,\"updated_at\":%f}"
-    inc.id
+    (json_escape inc.id)
     (encode_incident_status inc.status)
     (encode_severity inc.severity)
     (encode_position inc.position)
-    inc.description
+    (json_escape inc.description)
     inc.created_at
     inc.updated_at
 
@@ -96,8 +109,8 @@ let encode_unit_ (u : Types.unit_) =
   in
   Printf.sprintf
     "{\"id\":\"%s\",\"name\":\"%s\",\"status\":%s,\"position\":%s,\"updated_at\":%f}"
-    u.id
-    u.name
+    (json_escape u.id)
+    (json_escape u.name)
     (encode_unit_status u.status)
     pos_str
     u.updated_at
@@ -122,11 +135,5 @@ let encode_server_msg = function
     Printf.sprintf "{\"type\":\"sync_complete\",\"server_time\":%f}" server_time
   | Error { code; message } ->
     Printf.sprintf "{\"type\":\"error\",\"code\":%d,\"message\":\"%s\"}"
-      code message
+      code (json_escape message)
   | Pong -> "{\"type\":\"pong\"}"
-
-(* Decoding stubs — full JSON parsing requires yojson or similar.
-   These will be implemented when the dependency is added. *)
-let decode_event _json = None
-let decode_client_msg _json = None
-let decode_server_msg _json = None
