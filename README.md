@@ -45,16 +45,18 @@ Rules the codebase holds itself to, because dispatch software that misbehaves is
 
 ```
 src/
-  server/     C server (HTTP, WebSocket, SQLite)
-  core/       OCaml domain logic (incidents, dispatch, units, auth, sync)
-  engine/     Headless dispatch engine (pure, deterministic, replayable)
-  harness/    Stress test harness (synthetic dispatch scenarios)
-  client/     Frontend (js_of_ocaml)
-  shared/     Types shared between core and client
-db/           SQLite schema
-vendor/       Mongoose and SQLite3 (vendored)
-static/       HTML, CSS, Leaflet
-test/         Core logic test suite
+  server/      C server (HTTP, WebSocket, SQLite)
+  core/        OCaml domain logic (incidents, dispatch, units, auth, sync)
+  engine/      Headless dispatch engine (pure, deterministic, replayable)
+  codec/       Server-side JSON codec (yojson)
+  bridge_ffi/  OCaml FFI callbacks (C-OCaml boundary)
+  harness/     Stress test harness (synthetic dispatch scenarios)
+  client/      Frontend (js_of_ocaml)
+  shared/      Types shared between core and client
+db/            SQLite schema
+vendor/        Mongoose and SQLite3 (vendored)
+static/        HTML, CSS, Leaflet
+test/          Core logic test suite
 ```
 
 ## Building
@@ -145,7 +147,7 @@ The goal is to give you a correct, tested, replayable engine that you can build 
 
 ## Status
 
-This is early. The core engine works and has been stress-tested to 10 million dispatches. The C server, database layer, and frontend exist but the OCaml-to-C bridge isn't wired up yet. If you're expecting a finished product, come back later. If you're interested in where it's going, stick around.
+This is early. The core engine works and has been stress-tested to 10 million dispatches. The C server calls into the OCaml engine via FFI (`caml_callback`), so dispatch logic runs through the real type-checked engine on every request. If you're expecting a finished product, come back later. If you're interested in where it's going, stick around.
 
 ## Contact
 
