@@ -25,7 +25,7 @@ WHAT DOES NOT WORK (the frontend) (kill me):
 - the admin panel SUPPOSEDLY has role config but nobody can see it because
   browser cache is a personal attack on me specifically
 
-WHAT PLANNED AND TALKED ABOUT BUT NEVER BUILT (the actual point of all this):
+WHAT I PLANNED AND TALKED ABOUT BUT NEVER BUILT (the actual point of all this):
 - configurable buttons with predefined action types (change status, dispatch unit,
   open SOP, etc). admin picks an action type and sets params. we agreed on this.
   then we spent 3 hours fixing linker errors instead
