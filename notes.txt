@@ -40,7 +40,7 @@ WHAT PLANNED AND TALKED ABOUT BUT NEVER BUILT (the actual point of all this):
 - SOP to event type mapping. the junction table exists. no UI
 
 THE ACTUAL VISION (what this should look like):
-- reference: Intergraph I/CAD (the real one that NZ police uses)
+- reference: Intergraph I/CAD (the real one that NZ police uses among a few other agencies)
 - dense data. event monitor table. calltaker entry form. action buttons everywhere
 - the map is SECONDARY. it goes on a second monitor. it is not the main character
 - EVERYTHING is configurable by the admin. screens, forms, buttons, what buttons DO
