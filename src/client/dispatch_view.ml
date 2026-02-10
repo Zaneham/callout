@@ -1,10 +1,5 @@
-(* Callout CAD — Dispatch Board View
- *
- * Manages the incident list, unit list, and dispatch interactions.
- * Receives events from the WebSocket and updates the UI.
- *)
-
 open Js_of_ocaml
+open Shared.Escape
 
 let ws_ref : WebSockets.webSocket Js.t option ref = ref None
 
@@ -15,8 +10,6 @@ let send_message msg =
   | Some ws when ws##.readyState = WebSockets.OPEN ->
     ws##send (Js.string msg)
   | _ -> ()
-
-(* --- JSON helpers using browser-native JSON.parse --- *)
 
 let json_parse (s : string) : 'a Js.t =
   Js.Unsafe.fun_call
@@ -37,37 +30,35 @@ let get_opt_string obj field =
   else
     None
 
-(* --- String escaping --- *)
+let auth_request meth url body on_success =
+  let open XmlHttpRequest in
+  let req = create () in
+  req##_open (Js.string meth) (Js.string url) Js._true;
+  (match Login_view.get_token () with
+   | Some t ->
+     req##setRequestHeader (Js.string "Authorization")
+       (Js.string ("Bearer " ^ t))
+   | None -> ());
+  (match body with
+   | Some _ ->
+     req##setRequestHeader (Js.string "Content-Type")
+       (Js.string "application/json")
+   | None -> ());
+  req##.onreadystatechange := Js.wrap_callback (fun () ->
+    if req##.readyState = XmlHttpRequest.DONE then begin
+      if req##.status = 200 then begin
+        let data = Js.Opt.case req##.responseText (fun () -> "") Js.to_string in
+        on_success data
+      end else if req##.status = 401 then begin
+        Login_view.clear_session ();
+        Dom_html.window##.location##reload
+      end
+    end);
+  (match body with
+   | Some b -> req##send (Js.some (Js.string b))
+   | None -> req##send Js.null)
 
-let html_escape s =
-  let buf = Buffer.create (String.length s + 16) in
-  String.iter (fun c ->
-    match c with
-    | '&' -> Buffer.add_string buf "&amp;"
-    | '<' -> Buffer.add_string buf "&lt;"
-    | '>' -> Buffer.add_string buf "&gt;"
-    | '"' -> Buffer.add_string buf "&quot;"
-    | '\'' -> Buffer.add_string buf "&#x27;"
-    | c -> Buffer.add_char buf c
-  ) s;
-  Buffer.contents buf
-
-let json_escape s =
-  let buf = Buffer.create (String.length s + 16) in
-  String.iter (fun c ->
-    match c with
-    | '"' -> Buffer.add_string buf "\\\""
-    | '\\' -> Buffer.add_string buf "\\\\"
-    | '\n' -> Buffer.add_string buf "\\n"
-    | '\r' -> Buffer.add_string buf "\\r"
-    | '\t' -> Buffer.add_string buf "\\t"
-    | c when Char.code c < 0x20 ->
-      Buffer.add_string buf (Printf.sprintf "\\u%04x" (Char.code c))
-    | c -> Buffer.add_char buf c
-  ) s;
-  Buffer.contents buf
-
-(* --- DOM update helpers --- *)
+let auth_get url on_success = auth_request "GET" url None on_success
 
 let render_incident_item doc container obj =
   let id = get_string obj "id" in
@@ -124,27 +115,17 @@ let populate_list element_id json_str render_fn =
       done
     with _ -> ())
 
-let init () =
-  (* Fetch initial incident list *)
-  let open XmlHttpRequest in
-  let req = create () in
-  req##_open (Js.string "GET") (Js.string "/api/incidents") Js._true;
-  req##.onreadystatechange := Js.wrap_callback (fun () ->
-    if req##.readyState = XmlHttpRequest.DONE && req##.status = 200 then begin
-      let data = Js.Opt.case req##.responseText (fun () -> "") Js.to_string in
-      populate_list "incident-list" data render_incident_item
-    end);
-  req##send Js.null;
+let fetch_incidents () =
+  auth_get "/api/incidents" (fun data ->
+    populate_list "incident-list" data render_incident_item)
 
-  (* Fetch initial unit list *)
-  let req2 = create () in
-  req2##_open (Js.string "GET") (Js.string "/api/units") Js._true;
-  req2##.onreadystatechange := Js.wrap_callback (fun () ->
-    if req2##.readyState = XmlHttpRequest.DONE && req2##.status = 200 then begin
-      let data = Js.Opt.case req2##.responseText (fun () -> "") Js.to_string in
-      populate_list "unit-list" data render_unit_item
-    end);
-  req2##send Js.null
+let fetch_units () =
+  auth_get "/api/units" (fun data ->
+    populate_list "unit-list" data render_unit_item)
+
+let init () =
+  fetch_incidents ();
+  fetch_units ()
 
 let handle_message data =
   try
@@ -152,24 +133,8 @@ let handle_message data =
     let msg_type = get_string j "type" in
     match msg_type with
     | "events" ->
-      (* Re-fetch lists to reflect new state *)
-      let open XmlHttpRequest in
-      let req = create () in
-      req##_open (Js.string "GET") (Js.string "/api/incidents") Js._true;
-      req##.onreadystatechange := Js.wrap_callback (fun () ->
-        if req##.readyState = XmlHttpRequest.DONE && req##.status = 200 then begin
-          let d = Js.Opt.case req##.responseText (fun () -> "") Js.to_string in
-          populate_list "incident-list" d render_incident_item
-        end);
-      req##send Js.null;
-      let req2 = create () in
-      req2##_open (Js.string "GET") (Js.string "/api/units") Js._true;
-      req2##.onreadystatechange := Js.wrap_callback (fun () ->
-        if req2##.readyState = XmlHttpRequest.DONE && req2##.status = 200 then begin
-          let d = Js.Opt.case req2##.responseText (fun () -> "") Js.to_string in
-          populate_list "unit-list" d render_unit_item
-        end);
-      req2##send Js.null
+      fetch_incidents ();
+      fetch_units ()
     | "pong" -> ()
     | "error" ->
       let msg = match get_opt_string j "message" with
@@ -182,8 +147,6 @@ let handle_message data =
 
 let on_map_click lat lng =
   let doc = Dom_html.document in
-
-  (* Show a simple incident creation dialog *)
   let dialog = Dom_html.createDiv doc in
   dialog##.className := Js.string "incident-dialog";
   dialog##.innerHTML := Js.string (Printf.sprintf
@@ -210,18 +173,15 @@ let on_map_click lat lng =
 
   Dom.appendChild doc##.body dialog;
 
-  (* Cancel button *)
   let cancel_btn = doc##getElementById (Js.string "cancel-btn") in
   Js.Opt.iter cancel_btn (fun btn ->
     btn##.onclick := Dom_html.handler (fun _e ->
       Dom.removeChild doc##.body dialog;
       Js._true));
 
-  (* Create button *)
   let create_btn = doc##getElementById (Js.string "create-btn") in
   Js.Opt.iter create_btn (fun btn ->
     btn##.onclick := Dom_html.handler (fun _e ->
-      (* Read form values *)
       let severity_el = doc##getElementById (Js.string "severity-select") in
       let desc_el = doc##getElementById (Js.string "description-input") in
       let severity = Js.Opt.case severity_el
@@ -231,7 +191,6 @@ let on_map_click lat lng =
         (fun () -> "")
         (fun el -> Js.to_string (Js.Unsafe.get el (Js.string "value"))) in
 
-      (* Send to server via WebSocket *)
       let msg = Printf.sprintf
         {|{"type":"push_events","events":[{"type":"incident_created","position":{"lat":%f,"lng":%f,"timestamp":%f},"severity":"P%s","description":"%s"}]}|}
         lat lng (Js.to_float (new%js Js.date_now)##getTime /. 1000.0)
@@ -239,10 +198,8 @@ let on_map_click lat lng =
       in
       send_message msg;
 
-      (* Add marker to map *)
       Map_view.add_incident_marker ~lat ~lng
         ~popup_text:(Printf.sprintf "P%s: %s" (html_escape severity) (html_escape description));
 
-      (* Close dialog *)
       Dom.removeChild doc##.body dialog;
       Js._true))

@@ -1,4 +1,4 @@
 (library
  (name shared)
  (public_name callout-shared)
- (modules types protocol))
+ (modules types protocol escape))

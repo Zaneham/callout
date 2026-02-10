@@ -4,21 +4,15 @@
 #include <string.h>
 #include <stdlib.h>
 
+/* Static linking via -output-obj; disable __declspec(dllimport) */
+#ifdef _WIN32
+#define CAMLDLLIMPORT
+#endif
+
 #include <caml/mlvalues.h>
 #include <caml/callback.h>
 #include <caml/memory.h>
 #include <caml/alloc.h>
-
-/*
- * OCaml FFI bridge.
- *
- * Initialises the OCaml runtime, looks up the callbacks registered
- * by bridge_ffi.ml, and forwards every call across the border.
- *
- * String results are copied into a dynamic buffer because the OCaml
- * GC can relocate heap objects between calls. All functions that
- * cross the FFI boundary use CAMLparam/CAMLlocal to register GC roots.
- */
 
 static int s_initialized = 0;
 
@@ -30,8 +24,6 @@ static const value *cb_get_units       = NULL;
 static const value *cb_get_events      = NULL;
 static const value *cb_load_events     = NULL;
 
-/* Dynamic result buffer — grows as needed, never shrinks.
- * Safe because Mongoose is single-threaded. */
 static char *s_result_buf = NULL;
 static size_t s_result_buf_size = 0;
 
@@ -54,11 +46,14 @@ static const char *copy_ocaml_string(value v) {
 int bridge_init(void) {
     if (s_initialized) return 0;
 
-    /* Start the OCaml runtime */
+#ifdef _WIN32
+    wchar_t *wargv[] = { L"callout", NULL };
+    caml_startup(wargv);
+#else
     char *argv[] = { "callout", NULL };
     caml_startup(argv);
+#endif
 
-    /* Look up callbacks registered by bridge_ffi.ml */
     cb_init            = caml_named_value("bridge_init");
     cb_handle_ws_msg   = caml_named_value("bridge_handle_ws_message");
     cb_create_incident = caml_named_value("bridge_create_incident");
@@ -73,7 +68,6 @@ int bridge_init(void) {
         return -1;
     }
 
-    /* Call the OCaml init to reset engine state */
     caml_callback(*cb_init, Val_unit);
 
     s_initialized = 1;

@@ -1,0 +1,75 @@
+CALLOUT CAD - WHERE THE FUCK ARE WE
+=====================================
+
+STATUS: backend works. frontend is a war crime. i am not a frontend developer
+and god is punishing me for trying to be one.
+
+WHAT ACTUALLY WORKS (somehow):
+- C server builds and runs on windows (flexlink with -chain mingw64, 47 system libs)
+- OCaml bridge links with -linkall (without this the callbacks are NULL and everything is pain)
+- SQLite DB with roles, users, sessions, SOPs, event types, permissions, view panels
+- Auth system with bcrypt (vendored crypt_blowfish.c, no deps) + bearer tokens
+  + open mode (no users = no login wall)
+- All the CRUD API endpoints for roles, users, SOPs, event types
+- Panel/permission config endpoints (GET/PUT /api/roles/*/panels and /permissions)
+- WebSocket for real-time sync
+- OCaml engine for incidents/units/events
+- js_of_ocaml client compiles (2.6MB of javascript. normal.)
+- IBM Plex Mono font (the one good decision)
+
+WHAT DOES NOT WORK (the frontend) (kill me):
+- tab switching from map to dispatch is COOKED. leaflet eats all click events
+  like a hungry hungry hippo and refuses to give them back
+- the layout is "tabbed" but looks like someone described a CAD system to an AI
+  and the AI said "so basically google maps with a sidebar"
+- the admin panel SUPPOSEDLY has role config but nobody can see it because
+  browser cache is a personal attack on me specifically
+
+WHAT WE TALKED ABOUT BUT NEVER BUILT (the actual point of all this):
+- configurable buttons with predefined action types (change status, dispatch unit,
+  open SOP, etc). admin picks an action type and sets params. we agreed on this.
+  then we spent 3 hours fixing linker errors instead
+- configurable table columns per role. dispatchers see everything, field units
+  see less. literally just checkboxes in admin. never happened
+- user choosable light/dark theme. discussed for 30 seconds. forgotten forever
+- map package system. users upload their own geo layers (police get banks,
+  fire get hydrants, etc). cool idea. zero lines of code written for it
+- panel layout config. which panels each role sees, what order, positions.
+  the DATABASE TABLES exist. the API endpoints exist. the admin UI to actually
+  USE them was written but may or may not be visible (see: browser cache, above)
+- SOP to event type mapping. the junction table exists. no UI
+
+THE ACTUAL VISION (what this should look like):
+- reference: Intergraph I/CAD (the real one that NZ police uses)
+- dense data. event monitor table. calltaker entry form. action buttons everywhere
+- the map is SECONDARY. it goes on a second monitor. it is not the main character
+- EVERYTHING is configurable by the admin. screens, forms, buttons, what buttons DO
+- we ship defaults and get out of the way
+- basically we are building a mini no-code dispatch workstation platform
+  which is TOTALLY REASONABLE and NOT INSANE AT ALL
+
+WHAT TO DO NEXT (if i ever recover emotionally):
+1. fix the fucking tab switching. leaflet z-index is not my friend
+2. actually verify the admin role config UI works (hard refresh. CTRL SHIFT R.)
+3. build the configurable buttons system (panel_buttons table, action types,
+   admin UI to create them, frontend to render them)
+4. build the column config (which columns per role for the event table)
+5. theme picker (just swap a CSS class on body. light/dark. not hard. just do it)
+6. event entry form that actually looks like a dispatch workstation not a
+   contact us page from a startup website
+7. map packages (later. this is a whole thing)
+
+TECHNICAL NOTES FOR FUTURE ME:
+- LLVM_SYS_180_PREFIX='C:\LLVM' for cargo build (jovial compiler, different project)
+- opam exec -- dune build @all (dune not in PATH on windows)
+- opam exec -- make server (builds everything including flexlink step)
+- cp _build/default/src/client/app.bc.js static/app.bc.js (dune doesnt do this)
+- server runs on port 8080 not 8000
+- the makefile needs -linkall or ocaml strips the bridge_ffi module and all
+  callbacks are NULL and you will lose 2 hours of your life figuring out why
+- flexlink needs: -chain mingw64 -I $(OCAML_STDLIB)/flexdll
+- LINK_LIBS: -lasmrun -lunixnat -lws2_32 -ladvapi32 -lpthread -lole32
+  -lshlwapi -lversion -lsynchronization -lshell32 -luuid
+  (yes all of those. yes really. yes i cried)
+
+EMOTIONAL STATUS: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
