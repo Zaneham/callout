@@ -28,8 +28,8 @@ WHAT DOES NOT WORK (the frontend) (kill me):
 
 WHAT I PLANNED AND TALKED ABOUT BUT NEVER BUILT (the actual point of all this):
 - configurable buttons with predefined action types (change status, dispatch unit,
-  open SOP, etc). admin picks an action type and sets params. we agreed on this.
-  then we spent 3 hours fixing linker errors instead
+  open SOP, etc). admin picks an action type and sets params. I agreed on this.
+  then I spent 3 hours fixing linker errors instead
 - configurable table columns per role. dispatchers see everything, field units
   see less. literally just checkboxes in admin. never happened
 - user choosable light/dark theme. discussed for 30 seconds. forgotten forever
