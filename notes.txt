@@ -24,6 +24,7 @@ WHAT DOES NOT WORK (the frontend) (kill me):
   and the AI said "so basically google maps with a sidebar"
 - the admin panel SUPPOSEDLY has role config but nobody can see it because
   browser cache is a personal attack on me specifically
+- We are this close to just vibecoding this doozey but I asked Chatgpt and it gave me REACT. REACT?!
 
 WHAT I PLANNED AND TALKED ABOUT BUT NEVER BUILT (the actual point of all this):
 - configurable buttons with predefined action types (change status, dispatch unit,
